@@ -179,7 +179,9 @@ def load_model():
 def load_eval_artifacts():
     cm = pd.read_csv("model/confusion_matrix.csv", index_col=0)
     roc = pd.read_csv("model/roc_data.csv")
-    return cm, roc
+    pr = pd.read_csv("model/pr_curve.csv") if os.path.exists("model/pr_curve.csv") else None
+    lc = pd.read_csv("model/learning_curve.csv") if os.path.exists("model/learning_curve.csv") else None
+    return cm, roc, pr, lc
 
 
 # --- HEADER ---
@@ -657,7 +659,7 @@ with tab_model:
     """)
     try:
         _, _, metrics, importance = load_model()
-        cm, roc_data = load_eval_artifacts()
+        cm, roc_data, pr_data, lc_data = load_eval_artifacts()
 
         # --- Model Comparison Table ---
         if "models" in metrics:
@@ -785,16 +787,23 @@ with tab_model:
             "AUC-ROC": "Overall ability to tell healthy from pathological (see curve below).",
         }
         mcols = st.columns(5)
+        ci = metrics.get("bootstrap_ci", {})
         for col, (name, key) in zip(mcols, [
             ("Accuracy", "accuracy"), ("Precision", "precision"),
             ("Recall", "recall"), ("F1 Score", "f1_score"), ("AUC-ROC", "auc_roc"),
         ]):
             with col:
+                ci_key = key.replace("_score", "").replace("auc_roc", "roc_auc")
+                ci_info = ci.get(ci_key, {})
+                ci_text = ""
+                if ci_info:
+                    ci_text = f"<p style='color:#888;font-size:0.72rem;margin:2px 0 0 0'>95% CI: [{ci_info.get('ci_low','')}, {ci_info.get('ci_high','')}]</p>"
                 st.markdown(f"""
                 <div class="metric-card" style="text-align:center">
                     <p style='color:gray;margin:0'>{name}</p>
                     <h2 style='color:#1e3a8a;margin:5px 0'>{metrics.get(key, 'N/A')}</h2>
                     <p style='color:#555;font-size:0.75rem;margin:4px 0 0 0'>{metric_explanations[name]}</p>
+                    {ci_text}
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -854,6 +863,114 @@ with tab_model:
                 legend=dict(x=0.55, y=0.1),
             )
             st.plotly_chart(fig_roc, use_container_width=True, config={'displayModeBar': False})
+
+        # --- Precision-Recall Curve ---
+        if pr_data is not None:
+            st.markdown("<br><br><br>", unsafe_allow_html=True)
+            st.markdown("### Precision-Recall Curve")
+            st.markdown("""
+            **Why this matters for cancer screening:** In a screening tool, missing a
+            sick person (**false negative**) is far worse than a false alarm. A missed
+            case could delay cancer diagnosis, while a false alarm just means an
+            unnecessary laryngoscopy referral. So we want **high recall** (catch as
+            many pathological voices as possible), even if precision drops a little.
+
+            The curve below shows this tradeoff. The **Average Precision (AP)** score
+            summarises overall performance — closer to 1.0 is better.
+            """)
+            fig_pr = go.Figure()
+            fig_pr.add_trace(go.Scatter(
+                x=pr_data["recall"], y=pr_data["precision"],
+                mode="lines",
+                name=f"AP = {metrics.get('average_precision', 'N/A')}",
+                line=dict(color="#2563eb", width=2),
+                fill="tozeroy",
+                fillcolor="rgba(37,99,235,0.08)",
+            ))
+            baseline = 0.51  # approximate class ratio
+            fig_pr.add_trace(go.Scatter(
+                x=[0, 1], y=[baseline, baseline], mode="lines",
+                name=f"Random baseline ({baseline:.2f})",
+                line=dict(color="gray", dash="dash"),
+            ))
+            fig_pr.update_layout(
+                xaxis_title="Recall (how many sick voices we catch)",
+                yaxis_title="Precision (how often 'sick' predictions are correct)",
+                height=380, margin=dict(l=0, r=0, b=40, t=10),
+                legend=dict(x=0.02, y=0.08),
+                xaxis=dict(range=[0, 1.02]),
+                yaxis=dict(range=[0, 1.02]),
+            )
+            st.plotly_chart(fig_pr, use_container_width=True, config={'displayModeBar': False})
+
+        # --- Bootstrap Confidence Intervals ---
+        if "bootstrap_ci" in metrics:
+            st.markdown("<br><br><br>", unsafe_allow_html=True)
+            st.markdown("### Confidence Intervals (Bootstrap)")
+            st.markdown("""
+            A single accuracy number can be misleading. **How confident are we?**
+            We resampled the model's predictions 1,000 times to compute
+            **95% confidence intervals** — the range within which the true
+            performance very likely falls.
+            """)
+            ci = metrics["bootstrap_ci"]
+            ci_cols = st.columns(5)
+            ci_map = [
+                ("Accuracy", "accuracy"), ("F1 Score", "f1"),
+                ("Recall", "recall"), ("Precision", "precision"),
+                ("AUC-ROC", "roc_auc"),
+            ]
+            for col, (label, key) in zip(ci_cols, ci_map):
+                with col:
+                    d = ci.get(key, {})
+                    mean_val = d.get("mean", "N/A")
+                    ci_low = d.get("ci_low", "N/A")
+                    ci_high = d.get("ci_high", "N/A")
+                    st.markdown(f"""
+                    <div class="metric-card" style="text-align:center">
+                        <p style='color:gray;margin:0'>{label}</p>
+                        <h2 style='color:#1e3a8a;margin:5px 0'>{mean_val}</h2>
+                        <p style='color:#555;font-size:0.8rem;margin:4px 0 0 0'>95% CI: [{ci_low}, {ci_high}]</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # --- Learning Curve ---
+        if lc_data is not None:
+            st.markdown("<br><br><br>", unsafe_allow_html=True)
+            st.markdown("### Learning Curve — Would More Data Help?")
+            st.markdown("""
+            This chart shows how the model's performance (F1 score) changes as we
+            give it more training data. If the blue and red lines have converged,
+            adding more data won't help much. If there's still a big gap, the model
+            could improve with a larger dataset.
+            """)
+            fig_lc = go.Figure()
+            fig_lc.add_trace(go.Scatter(
+                x=lc_data["train_size"], y=lc_data["train_mean"],
+                mode="lines+markers", name="Training F1",
+                line=dict(color="#2563eb", width=2),
+            ))
+            fig_lc.add_trace(go.Scatter(
+                x=lc_data["train_size"], y=lc_data["val_mean"],
+                mode="lines+markers", name="Validation F1",
+                line=dict(color="#d32f2f", width=2),
+            ))
+            # Add confidence bands
+            fig_lc.add_trace(go.Scatter(
+                x=list(lc_data["train_size"]) + list(lc_data["train_size"][::-1]),
+                y=list(lc_data["val_mean"] + lc_data["val_std"]) +
+                  list((lc_data["val_mean"] - lc_data["val_std"])[::-1]),
+                fill="toself", fillcolor="rgba(211,47,47,0.1)",
+                line=dict(width=0), showlegend=False,
+            ))
+            fig_lc.update_layout(
+                xaxis_title="Number of Training Samples",
+                yaxis_title="F1 Score",
+                height=400, margin=dict(l=0, r=0, b=40, t=10),
+                legend=dict(x=0.6, y=0.15),
+                yaxis=dict(range=[0.5, 1.02]),
+            )
+            st.plotly_chart(fig_lc, use_container_width=True, config={'displayModeBar': False})
 
         st.markdown("<br><br><br>", unsafe_allow_html=True)
 
