@@ -12,7 +12,7 @@ Voice changes — particularly persistent hoarseness — are among the earliest 
 
 **This is a research prototype and is not intended for clinical diagnosis.**
 
-> **[▶ Try the live demo on Streamlit Cloud](https://erinerinchan-vocalpath-acoustic-biomarker.streamlit.app)**
+> **[▶ Try the live demo on Streamlit Cloud](https://vocalpath-acoustic-biomarker.streamlit.app/)**
 
 ## Features
 
