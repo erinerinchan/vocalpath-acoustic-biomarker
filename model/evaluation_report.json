@@ -1,0 +1,38 @@
+{
+  "data_source": "VOICED clinical dataset",
+  "n_samples": 208,
+  "n_healthy": 57,
+  "n_pathological": 151,
+  "cv_accuracy": 0.7067307692307693,
+  "cv_f1": 0.8231884057971014,
+  "cv_recall": 0.9403973509933775,
+  "cv_precision": 0.7319587628865979,
+  "cv_auc_roc": 0.6102009991867086,
+  "bootstrap_ci": {
+    "accuracy": {
+      "mean": 0.7083,
+      "ci_low": 0.6442,
+      "ci_high": 0.7692
+    },
+    "f1": {
+      "mean": 0.8239,
+      "ci_low": 0.7761,
+      "ci_high": 0.8658
+    },
+    "recall": {
+      "mean": 0.9406,
+      "ci_low": 0.9032,
+      "ci_high": 0.973
+    },
+    "precision": {
+      "mean": 0.7337,
+      "ci_low": 0.67,
+      "ci_high": 0.7949
+    },
+    "roc_auc": {
+      "mean": 0.6098,
+      "ci_low": 0.5283,
+      "ci_high": 0.6938
+    }
+  }
+}

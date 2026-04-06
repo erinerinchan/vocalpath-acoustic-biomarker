@@ -70,5 +70,19 @@
       "ci_high": 0.7662
     }
   },
-  "average_precision": 0.8165
+  "average_precision": 0.8165,
+  "smote_comparison": {
+    "without_smote": {
+      "f1": "0.835 +/- 0.025",
+      "recall": "0.942 +/- 0.021",
+      "accuracy": "0.729 +/- 0.043"
+    },
+    "with_smote": {
+      "f1": "0.819 +/- 0.046",
+      "recall": "0.826 +/- 0.062",
+      "accuracy": "0.734 +/- 0.066"
+    },
+    "f1_difference": -0.0167,
+    "winner": "No SMOTE"
+  }
 }
