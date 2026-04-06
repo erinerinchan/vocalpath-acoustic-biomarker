@@ -52,6 +52,66 @@ class TestDataGeneration:
         assert self.df["hnr"].max() <= 45
 
 
+class TestRealData:
+    """Verify real clinical data (VOICED dataset) structure and integrity."""
+
+    DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "real_features.csv")
+
+    @pytest.fixture(autouse=True)
+    def load_data(self):
+        self.df = pd.read_csv(self.DATA_PATH)
+
+    @pytest.mark.skipif(
+        not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "data", "real_features.csv")),
+        reason="Real data not extracted yet"
+    )
+    def test_real_dataset_has_208_samples(self):
+        assert len(self.df) == 208, f"Expected 208 VOICED samples, got {len(self.df)}"
+
+    @pytest.mark.skipif(
+        not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "data", "real_features.csv")),
+        reason="Real data not extracted yet"
+    )
+    def test_real_dataset_has_26_features(self):
+        feature_cols = [c for c in self.df.columns if c != "label"]
+        assert len(feature_cols) == 26, f"Expected 26 features, got {len(feature_cols)}"
+
+    @pytest.mark.skipif(
+        not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "data", "real_features.csv")),
+        reason="Real data not extracted yet"
+    )
+    def test_real_labels_are_binary(self):
+        assert set(self.df["label"].unique()) == {0, 1}
+
+    @pytest.mark.skipif(
+        not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "data", "real_features.csv")),
+        reason="Real data not extracted yet"
+    )
+    def test_real_no_missing_values(self):
+        assert self.df.isnull().sum().sum() == 0, "Real dataset contains NaN values"
+
+    @pytest.mark.skipif(
+        not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "data", "real_features.csv")),
+        reason="Real data not extracted yet"
+    )
+    def test_real_class_distribution(self):
+        counts = self.df["label"].value_counts()
+        assert counts[0] == 57, f"Expected 57 healthy, got {counts[0]}"
+        assert counts[1] == 151, f"Expected 151 pathological, got {counts[1]}"
+
+    @pytest.mark.skipif(
+        not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "data", "real_features.csv")),
+        reason="Real data not extracted yet"
+    )
+    def test_real_features_match_synthetic_columns(self):
+        synth_df = pd.read_csv(
+            os.path.join(os.path.dirname(__file__), "..", "data", "features.csv")
+        )
+        synth_cols = sorted([c for c in synth_df.columns if c != "label"])
+        real_cols = sorted([c for c in self.df.columns if c != "label"])
+        assert real_cols == synth_cols, "Real and synthetic datasets have different feature columns"
+
+
 # ── Model artifacts ──────────────────────────────────────────────
 
 class TestModelArtifacts:
@@ -95,9 +155,11 @@ class TestModelArtifacts:
 
     def test_feature_names_match_dataset(self):
         feature_names = joblib.load(os.path.join(self.MODEL_DIR, "feature_names.joblib"))
-        df = pd.read_csv(
-            os.path.join(os.path.dirname(__file__), "..", "data", "features.csv")
-        )
+        # Check against whichever dataset the model was trained on
+        real_path = os.path.join(os.path.dirname(__file__), "..", "data", "real_features.csv")
+        synth_path = os.path.join(os.path.dirname(__file__), "..", "data", "features.csv")
+        data_path = real_path if os.path.exists(real_path) else synth_path
+        df = pd.read_csv(data_path)
         dataset_features = [c for c in df.columns if c != "label"]
         assert list(feature_names) == dataset_features
 
@@ -204,17 +266,21 @@ class TestFeatureRanges:
 
     @pytest.fixture(autouse=True)
     def load_data(self):
-        self.df = pd.read_csv(
-            os.path.join(os.path.dirname(__file__), "..", "data", "features.csv")
-        )
+        # Test ranges against both synthetic and real data
+        real_path = os.path.join(os.path.dirname(__file__), "..", "data", "real_features.csv")
+        synth_path = os.path.join(os.path.dirname(__file__), "..", "data", "features.csv")
+        dfs = [pd.read_csv(synth_path)]
+        if os.path.exists(real_path):
+            dfs.append(pd.read_csv(real_path))
+        self.df = pd.concat(dfs, ignore_index=True)
 
     def test_jitter_is_plausible(self):
-        """Jitter (local) should be < 5% for all samples."""
-        assert (self.df["jitter_local"] < 0.05).all(), "Jitter exceeds 5%"
+        """Jitter (local) should be < 20% for all samples (real data can have extreme pathology)."""
+        assert (self.df["jitter_local"] < 0.20).all(), "Jitter exceeds 20%"
 
     def test_shimmer_is_plausible(self):
-        """Shimmer (local) should be < 15% for all samples."""
-        assert (self.df["shimmer_local"] < 0.15).all(), "Shimmer exceeds 15%"
+        """Shimmer (local) should be < 50% for all samples (real data can have extreme pathology)."""
+        assert (self.df["shimmer_local"] < 0.50).all(), "Shimmer exceeds 50%"
 
     def test_f0_in_plausible_range(self):
         """F0 mean should be between 50 and 500 Hz."""
@@ -267,3 +333,52 @@ class TestModelPredictionShape:
             for key in ["accuracy", "precision", "recall", "f1_score", "auc_roc"]:
                 assert key in hot, f"Missing held-out test metric: {key}"
                 assert 0 <= hot[key] <= 1, f"Held-out {key} out of range: {hot[key]}"
+
+
+# ── Feature extraction module ────────────────────────────────────
+
+class TestFeatureExtractionModule:
+    """Verify the shared feature_extraction module."""
+
+    def test_feature_names_list_has_26_items(self):
+        from feature_extraction import FEATURE_NAMES
+        assert len(FEATURE_NAMES) == 26, f"Expected 26 feature names, got {len(FEATURE_NAMES)}"
+
+    def test_feature_names_include_core_biomarkers(self):
+        from feature_extraction import FEATURE_NAMES
+        core = ["f0_mean", "jitter_local", "shimmer_local", "hnr", "mfcc_1", "spectral_flatness"]
+        for name in core:
+            assert name in FEATURE_NAMES, f"Missing core biomarker: {name}"
+
+    @pytest.mark.skipif(
+        not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "samples", "healthy_vowel.wav")),
+        reason="Sample audio not generated yet"
+    )
+    def test_extract_features_from_file(self):
+        from feature_extraction import extract_features_from_file, FEATURE_NAMES
+        audio_path = os.path.join(os.path.dirname(__file__), "..", "samples", "healthy_vowel.wav")
+        features, duration = extract_features_from_file(audio_path)
+        assert len(features) == 26
+        assert set(features.keys()) == set(FEATURE_NAMES)
+        assert duration > 0
+
+
+# ── Data source tracking ─────────────────────────────────────────
+
+class TestDataSourceTracking:
+    """Verify metrics.json tracks which data source the model was trained on."""
+
+    MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "model")
+
+    def test_metrics_has_data_source(self):
+        with open(os.path.join(self.MODEL_DIR, "metrics.json")) as f:
+            metrics = json.load(f)
+        assert "data_source" in metrics, "metrics.json should track data_source"
+
+    def test_cnn_metrics_has_caveat(self):
+        cnn_path = os.path.join(self.MODEL_DIR, "cnn_metrics.json")
+        if os.path.exists(cnn_path):
+            with open(cnn_path) as f:
+                cnn = json.load(f)
+            assert "caveat" in cnn or "data_source" in cnn, \
+                "CNN metrics should document synthetic-only limitation"
