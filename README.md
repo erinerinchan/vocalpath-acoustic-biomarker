@@ -18,12 +18,15 @@ Voice changes — particularly persistent hoarseness — are among the earliest 
 
 - **26 acoustic biomarkers** including jitter, shimmer, HNR, MFCCs, spectral features
 - **Multi-model comparison** (Random Forest, SVM, Logistic Regression) with 5-fold stratified CV
+- **Held-out test set evaluation** (80/20 stratified split) for honest performance estimates
+- **SHAP explanations** showing which features drove each individual prediction
 - **Precision-recall analysis** with clinical discussion of why recall matters in cancer screening
 - **Bootstrap confidence intervals** (1,000 iterations) for all metrics
 - **Learning curves** to assess whether more data would improve performance
 - **Interactive visualizations**: waveform, MFCC spectrogram, radar chart, confusion matrix, ROC curve, PR curve
 - **Downloadable HTML report** for each analysis
 - **Real audio testing** script to run voice recordings through the pipeline
+- **Input validation** with minimum duration (2s) and silence detection
 - **Methodology documentation** with clinical references
 
 ## Quick Start
@@ -61,6 +64,7 @@ vocal-path-ai/
 ├── generate_readme_demo.py   # Generates README demo image
 ├── train_spectrogram_cnn.py  # Mel-spectrogram CNN (deep learning, optional)
 ├── test_real_audio.py        # Test pipeline on real audio recordings
+├── CHANGELOG.md              # Version history and changes
 ├── tests/
 │   └── test_pipeline.py      # Unit tests for core pipeline
 ├── .streamlit/
@@ -68,7 +72,8 @@ vocal-path-ai/
 ├── requirements.txt
 ├── .gitignore
 ├── data/
-│   └── features.csv          # Extracted feature dataset
+│   ├── features.csv          # Extracted feature dataset
+│   └── README.md             # Data provenance and schema documentation
 ├── model/
 │   ├── rf_classifier.joblib  # Trained model
 │   ├── feature_names.joblib  # Feature column names
@@ -109,10 +114,48 @@ Best model selected by F1 score. All models use StandardScaler preprocessing and
 
 ### Evaluation Methodology
 
+- **Stratified 80/20 train/test split** held out before any cross-validation to prevent data leakage
+- **5-fold stratified CV** on the training set for model selection
+- **Held-out test set** for final, unbiased performance estimate
 - **Precision-recall curves** with clinical discussion: in cancer screening, recall (sensitivity) is prioritised over precision — missing a sick person is worse than a false alarm
 - **Bootstrap confidence intervals** (1,000 resamples) provide honest uncertainty estimates rather than single-point accuracy claims
 - **Learning curves** show model performance vs. training set size, indicating whether more data would help
+- **SHAP explanations** for per-prediction interpretability — shows which features drove each individual result
 - **Cohen's d effect sizes** and Mann-Whitney U tests quantify feature discriminative power with statistical rigour
+
+## Results
+
+### Model Comparison (5-Fold CV on Training Set)
+
+| Model | Accuracy | Precision | Recall | F1 | AUC-ROC |
+|-------|----------|-----------|--------|-----|---------|
+| Random Forest | 0.852 | 0.847 | 0.873 | 0.858 | 0.933 |
+| SVM (RBF) | **0.885** | **0.900** | 0.873 | **0.886** | **0.927** |
+| Logistic Regression | 0.848 | 0.867 | 0.833 | 0.846 | 0.917 |
+
+*Selected model: SVM (RBF) (highest F1). All use StandardScaler + balanced class weights.*
+
+### Held-Out Test Set (20% Stratified Split, N=120)
+
+| Metric | Value |
+|--------|-------|
+| Accuracy | 0.892 |
+| Precision | 0.914 |
+| Recall | 0.869 |
+| F1 | 0.891 |
+| AUC-ROC | 0.915 |
+
+### 95% Bootstrap Confidence Intervals (1,000 iterations)
+
+| Metric | Mean | 95% CI |
+|--------|------|--------|
+| Accuracy | 0.888 | [0.856, 0.915] |
+| F1 | 0.889 | [0.858, 0.917] |
+| Recall | 0.885 | [0.846, 0.924] |
+| Precision | 0.893 | [0.849, 0.929] |
+| AUC-ROC | 0.923 | [0.896, 0.946] |
+
+> **Important:** All results above are on **synthetic data**. Performance on real clinical recordings (e.g., Saarbrücken Voice Database) is expected to differ. See Clinical Validity section below.
 
 ### Data
 
