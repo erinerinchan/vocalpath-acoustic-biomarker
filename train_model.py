@@ -70,11 +70,22 @@ def evaluate_model(pipeline, X, y, cv):
 
 def main():
     # ── 1. Load data ──
-    df = pd.read_csv("data/features.csv")
+    # Prefer real clinical data if available; fall back to synthetic
+    real_path = "data/real_features.csv"
+    synth_path = "data/features.csv"
+
+    if os.path.exists(real_path):
+        df = pd.read_csv(real_path)
+        data_source = "VOICED clinical dataset (Cesari et al., 2018)"
+    else:
+        df = pd.read_csv(synth_path)
+        data_source = "Synthetic (generate_demo_data.py)"
+
     feature_cols = [c for c in df.columns if c != "label"]
     X = df[feature_cols].values   # the 26 voice measurements (input)
     y = df["label"].values         # 0 = healthy, 1 = pathological (answer key)
 
+    print(f"Data source: {data_source}")
     print(f"Dataset: {X.shape[0]} samples, {X.shape[1]} features")
     print(f"Class distribution: Healthy={sum(y == 0)}, Pathological={sum(y == 1)}\n")
 
@@ -210,7 +221,8 @@ def main():
         "n_train": int(X_train.shape[0]),
         "n_test": int(X_test.shape[0]),
         "cv_folds": 5,
-        "note": "Trained on synthetic data with realistic class overlap and 5% label noise. See generate_demo_data.py.",
+        "data_source": data_source,
+        "note": f"Trained on {data_source}. See load_voiced.py / generate_demo_data.py.",
         "models": {},
     }
     for name, m in all_metrics.items():
