@@ -12,4 +12,5 @@ soundfile
 audio-recorder-streamlit
 pytest
 shap
+imbalanced-learn
 # tensorflow  # optional — only needed locally for train_spectrogram_cnn.py
