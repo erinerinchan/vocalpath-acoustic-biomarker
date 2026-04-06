@@ -1,0 +1,15 @@
+{
+  "accuracy": 1.0,
+  "auc_roc": 1.0,
+  "optimal_threshold": 0.0145,
+  "n_train": 640,
+  "n_test": 160,
+  "spectrogram_shape": [
+    128,
+    130,
+    1
+  ],
+  "epochs": 6,
+  "architecture": "3xConv2D + BatchNorm + MaxPool -> Dense(128) -> Sigmoid",
+  "note": "Trained on synthetic audio mel-spectrograms, not real clinical data"
+}

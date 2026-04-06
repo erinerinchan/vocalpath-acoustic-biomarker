@@ -1,0 +1,14 @@
+streamlit
+librosa
+praat-parselmouth
+numpy
+pandas
+scikit-learn
+plotly
+matplotlib
+seaborn
+joblib
+soundfile
+audio-recorder-streamlit
+pytest
+# tensorflow  # optional — only needed locally for train_spectrogram_cnn.py

@@ -1,0 +1,35 @@
+{
+  "best_model": "SVM (RBF)",
+  "n_samples": 600,
+  "n_features": 26,
+  "cv_folds": 5,
+  "note": "Trained on synthetic data with realistic class overlap and 5% label noise. See generate_demo_data.py.",
+  "models": {
+    "Random Forest": {
+      "accuracy": "0.873 +/- 0.024",
+      "precision": "0.870 +/- 0.033",
+      "recall": "0.886 +/- 0.031",
+      "f1_score": "0.877 +/- 0.023",
+      "auc_roc": "0.923 +/- 0.021"
+    },
+    "SVM (RBF)": {
+      "accuracy": "0.882 +/- 0.017",
+      "precision": "0.910 +/- 0.016",
+      "recall": "0.853 +/- 0.027",
+      "f1_score": "0.880 +/- 0.018",
+      "auc_roc": "0.926 +/- 0.024"
+    },
+    "Logistic Regression": {
+      "accuracy": "0.863 +/- 0.027",
+      "precision": "0.885 +/- 0.039",
+      "recall": "0.843 +/- 0.030",
+      "f1_score": "0.863 +/- 0.025",
+      "auc_roc": "0.917 +/- 0.027"
+    }
+  },
+  "accuracy": "0.882 +/- 0.017",
+  "precision": "0.910 +/- 0.016",
+  "recall": "0.853 +/- 0.027",
+  "f1_score": "0.880 +/- 0.018",
+  "auc_roc": "0.926 +/- 0.024"
+}
