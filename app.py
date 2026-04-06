@@ -17,6 +17,12 @@ import soundfile as sf
 from datetime import datetime
 from audio_recorder_streamlit import audio_recorder
 
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
+
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="VocalPath | Acoustic Biomarker Analysis", page_icon="🔬", layout="wide")
 
@@ -236,8 +242,22 @@ with tab_analysis:
         try:
             y, sr = librosa.load(audio_data)
             duration = librosa.get_duration(y=y, sr=sr)
-            if duration < 1.0:
-                st.error("Recording too short. Please upload at least 1 second of audio.")
+            if duration < 2.0:
+                st.error(
+                    "⚠️ Recording too short. Please upload at least **2 seconds** of a sustained "
+                    "vowel for reliable feature extraction. Short clips don't contain enough "
+                    "vocal-cord cycles to measure pitch stability accurately."
+                )
+                st.stop()
+
+            # Check for near-silence / very low energy
+            rms_energy = np.sqrt(np.mean(y ** 2))
+            if rms_energy < 0.005:
+                st.error(
+                    "⚠️ Recording appears to be **silence or very quiet**. Please ensure your "
+                    "microphone is working and speak at a normal volume. RMS energy detected: "
+                    f"{rms_energy:.4f}"
+                )
                 st.stop()
 
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -382,6 +402,78 @@ with tab_analysis:
                                      height=400, margin=dict(l=40, r=40, b=40, t=40))
             st.plotly_chart(fig_radar, use_container_width=True)
 
+            # ── SHAP Explanation ──
+            if SHAP_AVAILABLE:
+                st.markdown("---")
+                st.subheader("Why Did the Model Make This Prediction?")
+                st.caption(
+                    "SHAP (SHapley Additive exPlanations) shows which voice measurements "
+                    "pushed the prediction toward 'Pathological' (red) or 'Healthy' (blue). "
+                    "Longer bars = stronger influence on this specific prediction."
+                )
+                try:
+                    # Get the underlying classifier from the pipeline
+                    clf = model.named_steps.get("clf", None)
+                    scaler = model.named_steps.get("scaler", None)
+                    if clf is not None and scaler is not None:
+                        feature_vector_scaled = scaler.transform(feature_vector)
+                        explainer = shap.TreeExplainer(clf)
+                        shap_values = explainer.shap_values(feature_vector_scaled)
+
+                        # For binary classification, shap_values may be a list of 2 arrays
+                        if isinstance(shap_values, list):
+                            sv = shap_values[1]  # class 1 = pathological
+                        else:
+                            sv = shap_values
+
+                        # Friendly feature names for SHAP
+                        friendly = {
+                            "f0_mean": "Base Pitch", "f0_std": "Pitch Wobble",
+                            "jitter_local": "Jitter", "jitter_rap": "Jitter RAP",
+                            "shimmer_local": "Shimmer", "shimmer_apq3": "Shimmer APQ3",
+                            "hnr": "Voice Clarity (HNR)",
+                            "spectral_centroid": "Brightness", "spectral_bandwidth": "Freq. Spread",
+                            "spectral_flatness": "Noisiness", "spectral_rolloff": "High-Freq Energy",
+                            "zcr": "Zero-Crossing Rate", "rms": "Loudness",
+                        }
+                        for i in range(1, 14):
+                            friendly[f"mfcc_{i}"] = f"MFCC-{i}"
+                        display_names = [friendly.get(f, f) for f in feature_names]
+
+                        # Build a horizontal bar chart of SHAP values
+                        shap_df = pd.DataFrame({
+                            "feature": display_names,
+                            "shap_value": sv.flatten(),
+                        }).sort_values("shap_value", key=abs, ascending=True)
+
+                        # Show top 10 most influential features
+                        shap_top = shap_df.tail(10)
+                        colors_shap = ["#d32f2f" if v > 0 else "#2563eb" for v in shap_top["shap_value"]]
+
+                        fig_shap = go.Figure(go.Bar(
+                            x=shap_top["shap_value"],
+                            y=shap_top["feature"],
+                            orientation="h",
+                            marker_color=colors_shap,
+                        ))
+                        fig_shap.update_layout(
+                            height=350,
+                            margin=dict(l=0, r=0, b=40, t=10),
+                            xaxis_title="Impact on prediction (SHAP value)",
+                            yaxis_title="",
+                        )
+                        st.plotly_chart(fig_shap, use_container_width=True)
+
+                        # Plain-English summary of the top driver
+                        top_feat = shap_df.iloc[-1]
+                        direction = "toward Pathological" if top_feat["shap_value"] > 0 else "toward Healthy"
+                        st.info(
+                            f"**Strongest driver:** {top_feat['feature']} pushed the prediction "
+                            f"{direction} (SHAP = {top_feat['shap_value']:+.3f})"
+                        )
+                except Exception:
+                    st.caption("SHAP explanations could not be generated for this model type.")
+
             with st.expander("View All Extracted Features"):
                 feat_df = pd.DataFrame([features]).T
                 feat_df.columns = ["Value"]
@@ -400,7 +492,13 @@ with tab_analysis:
 
         except Exception as e:
             st.error(f"Error processing audio: {e}")
-            st.info("Ensure the file is a valid audio recording (.wav, .mp3, .ogg, .flac, .m4a) of a sustained vowel.")
+            st.info(
+                "**Troubleshooting tips:**\n"
+                "- Ensure the file is a valid audio recording (.wav, .mp3, .ogg, .flac, .m4a)\n"
+                "- Record a sustained vowel ('Ah') for at least 2–3 seconds\n"
+                "- Use a quiet environment to reduce background noise\n"
+                "- If recording from a browser, make sure microphone permissions are granted"
+            )
 
     else:
         st.markdown("""
@@ -806,6 +904,34 @@ with tab_model:
                     {ci_text}
                 </div>
                 """, unsafe_allow_html=True)
+
+        # --- Held-Out Test Set Results ---
+        if "held_out_test" in metrics:
+            st.markdown("<br><br><br>", unsafe_allow_html=True)
+            st.markdown("### Held-Out Test Set Results")
+            st.markdown(f"""
+            The metrics above come from cross-validation on the training set.
+            Below are results on a **separate 20% held-out test set** ({metrics['held_out_test'].get('n_test', 'N/A')} samples)
+            that the model never saw during training or model selection.
+            This is the most honest estimate of real-world performance.
+            """)
+            hot = metrics["held_out_test"]
+            hot_cols = st.columns(5)
+            for col, (name, key) in zip(hot_cols, [
+                ("Accuracy", "accuracy"), ("Precision", "precision"),
+                ("Recall", "recall"), ("F1 Score", "f1_score"), ("AUC-ROC", "auc_roc"),
+            ]):
+                with col:
+                    val = hot.get(key, "N/A")
+                    if isinstance(val, float):
+                        val = f"{val:.3f}"
+                    st.markdown(f"""
+                    <div class="metric-card" style="text-align:center">
+                        <p style='color:gray;margin:0'>{name}</p>
+                        <h2 style='color:#1e3a8a;margin:5px 0'>{val}</h2>
+                        <p style='color:#555;font-size:0.75rem;margin:4px 0 0 0'>Held-out test set</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
         st.markdown("<br><br><br>", unsafe_allow_html=True)
 
