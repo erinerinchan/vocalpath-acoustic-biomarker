@@ -40,6 +40,13 @@ from sklearn.metrics import (confusion_matrix, roc_curve, auc, classification_re
 from sklearn.model_selection import learning_curve
 import joblib
 
+try:
+    from imblearn.over_sampling import SMOTE
+    from imblearn.pipeline import Pipeline as ImbPipeline
+    SMOTE_AVAILABLE = True
+except ImportError:
+    SMOTE_AVAILABLE = False
+
 
 def evaluate_model(pipeline, X, y, cv):
     """
@@ -146,7 +153,56 @@ def main():
             if not k.endswith("_std"):
                 print(f"  {k}: {v:.3f} +/- {metrics[f'{k}_std']:.3f}")
 
-    # ── 5. Pick the winner (highest F1 score) ──
+    # ── 5. SMOTE oversampling comparison ──
+    # SMOTE generates synthetic minority-class samples to balance the dataset.
+    # We compare RF with and without SMOTE to see if it helps.
+    smote_comparison = None
+    if SMOTE_AVAILABLE:
+        print(f"\n{'=' * 60}")
+        print("SMOTE Oversampling Comparison (Random Forest)")
+        print("-" * 60)
+
+        # Without SMOTE (already computed above)
+        rf_no_smote = all_metrics["Random Forest"]
+        print(f"  Without SMOTE: F1={rf_no_smote['f1']:.3f}, Recall={rf_no_smote['recall']:.3f}")
+
+        # With SMOTE
+        smote_pipeline = ImbPipeline([
+            ("scaler", StandardScaler()),
+            ("smote", SMOTE(random_state=42)),
+            ("clf", RandomForestClassifier(
+                n_estimators=100, max_depth=10,
+                random_state=42, class_weight="balanced",
+            )),
+        ])
+        smote_metrics = evaluate_model(smote_pipeline, X_train, y_train, cv)
+        print(f"  With SMOTE:    F1={smote_metrics['f1']:.3f}, Recall={smote_metrics['recall']:.3f}")
+
+        f1_diff = smote_metrics["f1"] - rf_no_smote["f1"]
+        recall_diff = smote_metrics["recall"] - rf_no_smote["recall"]
+        winner = "SMOTE" if f1_diff > 0.005 else "No SMOTE" if f1_diff < -0.005 else "Tie"
+        print(f"  F1 difference: {f1_diff:+.3f}  |  Recall difference: {recall_diff:+.3f}")
+        print(f"  Winner: {winner}")
+
+        smote_comparison = {
+            "without_smote": {
+                "f1": f"{rf_no_smote['f1']:.3f} +/- {rf_no_smote['f1_std']:.3f}",
+                "recall": f"{rf_no_smote['recall']:.3f} +/- {rf_no_smote['recall_std']:.3f}",
+                "accuracy": f"{rf_no_smote['accuracy']:.3f} +/- {rf_no_smote['accuracy_std']:.3f}",
+            },
+            "with_smote": {
+                "f1": f"{smote_metrics['f1']:.3f} +/- {smote_metrics['f1_std']:.3f}",
+                "recall": f"{smote_metrics['recall']:.3f} +/- {smote_metrics['recall_std']:.3f}",
+                "accuracy": f"{smote_metrics['accuracy']:.3f} +/- {smote_metrics['accuracy_std']:.3f}",
+            },
+            "f1_difference": round(f1_diff, 4),
+            "winner": winner,
+        }
+    else:
+        print("\nimbalanced-learn not installed — skipping SMOTE comparison")
+        print("Install with: pip install imbalanced-learn")
+
+    # ── 6. Pick the winner (highest F1 score) ──
     # F1 is chosen over plain accuracy because it balances precision (don't
     # cry wolf) and recall (don't miss sick people) — both matter in health.
     best_name = max(all_metrics, key=lambda n: all_metrics[n]["f1"])
@@ -154,7 +210,7 @@ def main():
     print(f"\n{'=' * 60}")
     print(f"Best model (by F1): {best_name}")
 
-    # ── 6. Build a confusion matrix for the best model ──
+    # ── 7. Build a confusion matrix for the best model ──
     # cross_val_predict gives us "out-of-fold" predictions: each sample is
     # predicted by a model that was NOT trained on it, so no cheating.
     y_pred = cross_val_predict(best_pipeline, X_train, y_train, cv=cv)
@@ -162,10 +218,10 @@ def main():
     report = classification_report(y_train, y_pred, target_names=["Healthy", "Pathological"])
     print(f"\nClassification Report ({best_name}) [CV on train set]:\n{report}")
 
-    # ── 7. Train the winner on ALL training data so it's as strong as possible ──
+    # ── 8. Train the winner on ALL training data so it's as strong as possible ──
     best_pipeline.fit(X_train, y_train)
 
-    # ── 7b. Evaluate on held-out test set ──
+    # ── 8b. Evaluate on held-out test set ──
     y_test_pred = best_pipeline.predict(X_test)
     y_test_proba = best_pipeline.predict_proba(X_test)[:, 1]
     test_metrics = {
@@ -183,16 +239,16 @@ def main():
     test_report = classification_report(y_test, y_test_pred, target_names=["Healthy", "Pathological"])
     print(f"\nTest Set Classification Report:\n{test_report}")
 
-    # ── 7c. Refit on ALL data for deployment ──
+    # ── 8c. Refit on ALL data for deployment ──
     # (Cross-validation was just for evaluation — now we use everything.)
     best_pipeline.fit(X, y)
 
-    # ── 8. ROC curve data (cross-validated probabilities on training set) ──
+    # ── 9. ROC curve data (cross-validated probabilities on training set) ──
     y_proba = cross_val_predict(best_pipeline, X_train, y_train, cv=cv, method="predict_proba")[:, 1]
     fpr, tpr, _ = roc_curve(y_train, y_proba)
     roc_auc = auc(fpr, tpr)
 
-    # ── 9. Feature importance ──
+    # ── 10. Feature importance ──
     # We always use Random Forest for this because it natively tells us
     # "which features did the decision trees split on most often?"
     # SVM and Logistic Regression don't give importance scores as easily.
@@ -207,7 +263,7 @@ def main():
     print(f"\nTop 10 Features (Random Forest):")
     print(importance_df.head(10).to_string(index=False))
 
-    # ── 10. Save everything to model/ so the Streamlit app can load it ──
+    # ── 11. Save everything to model/ so the Streamlit app can load it ──
     os.makedirs("model", exist_ok=True)
 
     # The trained model itself (used by the app for real-time predictions)
@@ -264,7 +320,7 @@ def main():
 
     importance_df.to_csv("model/feature_importance.csv", index=False)
 
-    # ── 11. Precision-Recall curve data ──
+    # ── 12. Precision-Recall curve data ──
     prec, rec, pr_thresh = precision_recall_curve(y_train, y_proba)
     avg_prec = average_precision_score(y_train, y_proba)
     pr_df = pd.DataFrame({
@@ -275,7 +331,7 @@ def main():
     pr_df.to_csv("model/pr_curve.csv", index=False)
     print(f"\nAverage Precision: {avg_prec:.3f}")
 
-    # ── 12. Bootstrap confidence intervals ──
+    # ── 13. Bootstrap confidence intervals ──
     # Resample predictions 1000 times to get 95% CI on each metric
     y_pred_cv = (y_proba >= 0.5).astype(int)
     n_boot = 1000
@@ -300,11 +356,15 @@ def main():
     save_metrics["bootstrap_ci"] = ci_data
     save_metrics["average_precision"] = round(avg_prec, 4)
 
+    # Add SMOTE comparison if available
+    if smote_comparison is not None:
+        save_metrics["smote_comparison"] = smote_comparison
+
     # Re-save metrics.json with new fields
     with open("model/metrics.json", "w") as f:
         json.dump(save_metrics, f, indent=2)
 
-    # ── 13. Learning curves ──
+    # ── 14. Learning curves ──
     # Shows how performance changes with data size
     print("\nComputing learning curves...")
     train_sizes_abs, train_scores, val_scores = learning_curve(
