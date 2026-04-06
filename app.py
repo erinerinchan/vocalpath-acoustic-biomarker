@@ -79,6 +79,8 @@ st.markdown("""
         h3 { font-size: 1rem !important; }
         .metric-card { padding: 12px; }
         .metric-card h2 { font-size: 1rem !important; }
+        .disclaimer { padding: 10px; font-size: 0.85em; }
+        section[data-testid="stSidebar"] { min-width: 0 !important; }
     }
 
     /* Mobile-only sidebar reminder */
@@ -94,10 +96,6 @@ st.markdown("""
             text-align: center;
         }
         .mobile-sidebar-hint .hint-icon { font-size: 2rem; margin-bottom: 6px; }
-    }
-        .disclaimer { padding: 10px; font-size: 0.85em; }
-        /* Sidebar file uploader */
-        section[data-testid="stSidebar"] { min-width: 0 !important; }
     }
 </style>
 """, unsafe_allow_html=True)
