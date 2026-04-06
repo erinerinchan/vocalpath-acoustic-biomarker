@@ -11,5 +11,7 @@
   ],
   "epochs": 6,
   "architecture": "3xConv2D + BatchNorm + MaxPool -> Dense(128) -> Sigmoid",
-  "note": "Trained on synthetic audio mel-spectrograms, not real clinical data"
+  "data_source": "Synthetic audio only (NOT clinical data)",
+  "caveat": "100% accuracy is an artifact of synthetic data where pathological markers (jitter, sub-harmonics, noise) are programmatically injected with clear separation. This metric is NOT representative of real-world performance. On real clinical data, the tabular pipeline achieves ~69% accuracy — expect similar or worse from the CNN on real recordings.",
+  "note": "Trained on synthetic audio mel-spectrograms. This serves as a pipeline validation, not a clinical performance claim."
 }
