@@ -9,3 +9,6 @@ venv/
 .pytest_cache/
 !requirements.txt
 .streamlit/secrets.toml
+
+# Raw VOICED dataset (too large for git; download from Kaggle)
+data/voiced/
