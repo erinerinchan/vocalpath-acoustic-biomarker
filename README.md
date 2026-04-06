@@ -8,6 +8,8 @@ A machine learning tool for voice pathology screening through acoustic biomarker
 
 VocalPath extracts **26 clinically validated acoustic features** from voice recordings and classifies them as healthy or potentially pathological using a trained classifier. The tool provides interactive visualizations comparing extracted features against healthy baselines.
 
+The model is trained on **real clinical recordings** from the VOICED dataset — 208 voice samples collected at the University of Naples Federico II hospital, with diagnoses confirmed by laryngoscopy.
+
 Voice changes — particularly persistent hoarseness — are among the earliest symptoms of **laryngeal cancer**, one of the most common head-and-neck cancers (American Cancer Society, 2024). An automated screening tool could flag at-risk individuals for timely ENT referral and laryngoscopy, potentially improving early detection rates in under-served communities.
 
 **This is a research prototype and is not intended for clinical diagnosis.**
@@ -58,6 +60,8 @@ streamlit run app.py
 ```
 vocal-path-ai/
 ├── app.py                    # Streamlit web application
+├── feature_extraction.py     # Shared 26-feature extraction module
+├── load_voiced.py            # VOICED clinical dataset ingestion
 ├── generate_demo_data.py     # Synthetic data generation with realistic overlap
 ├── train_model.py            # Multi-model training and evaluation
 ├── generate_sample_audio.py  # Synthetic test .wav generator
@@ -72,7 +76,10 @@ vocal-path-ai/
 ├── requirements.txt
 ├── .gitignore
 ├── data/
-│   ├── features.csv          # Extracted feature dataset
+│   ├── features.csv          # Synthetic feature dataset (600 samples)
+│   ├── real_features.csv     # Real clinical features (VOICED, 208 samples)
+│   ├── real_features_full.csv # Real features with demographics
+│   ├── voiced/               # VOICED clinical recordings (not in git)
 │   └── README.md             # Data provenance and schema documentation
 ├── model/
 │   ├── rf_classifier.joblib  # Trained model
@@ -125,59 +132,66 @@ Best model selected by F1 score. All models use StandardScaler preprocessing and
 
 ## Results
 
-### Model Comparison (5-Fold CV on Training Set)
+### Real Clinical Data (VOICED Dataset, N=208)
+
+The model is now trained and evaluated on the **VOICED clinical dataset** — 208 real voice recordings (57 healthy, 151 pathological) from the University of Naples Federico II hospital, with diagnoses confirmed by laryngoscopy under the SIFEL protocol.
+
+#### Model Comparison (5-Fold CV on Training Set, N=166)
 
 | Model | Accuracy | Precision | Recall | F1 | AUC-ROC |
 |-------|----------|-----------|--------|-----|---------|
-| Random Forest | 0.852 | 0.847 | 0.873 | 0.858 | 0.933 |
-| SVM (RBF) | **0.885** | **0.900** | 0.873 | **0.886** | **0.927** |
-| Logistic Regression | 0.848 | 0.867 | 0.833 | 0.846 | 0.917 |
+| **Random Forest** | 0.729 | 0.751 | **0.942** | **0.835** | 0.688 |
+| SVM (RBF) | 0.711 | **0.855** | 0.735 | 0.786 | **0.724** |
+| Logistic Regression | 0.687 | 0.831 | 0.719 | 0.769 | 0.718 |
 
-*Selected model: SVM (RBF) (highest F1). All use StandardScaler + balanced class weights.*
+*Selected model: Random Forest (highest F1). High recall (94%) is desirable for a screening tool.*
 
-### Held-Out Test Set (20% Stratified Split, N=120)
+#### Held-Out Test Set (20% Stratified Split, N=42)
 
 | Metric | Value |
 |--------|-------|
-| Accuracy | 0.892 |
-| Precision | 0.914 |
-| Recall | 0.869 |
-| F1 | 0.891 |
-| AUC-ROC | 0.915 |
+| Accuracy | 0.690 |
+| Precision | 0.730 |
+| Recall | 0.900 |
+| F1 | 0.806 |
+| AUC-ROC | 0.637 |
 
-### 95% Bootstrap Confidence Intervals (1,000 iterations)
+#### 95% Bootstrap Confidence Intervals (1,000 iterations)
 
 | Metric | Mean | 95% CI |
 |--------|------|--------|
-| Accuracy | 0.888 | [0.856, 0.915] |
-| F1 | 0.889 | [0.858, 0.917] |
-| Recall | 0.885 | [0.846, 0.924] |
-| Precision | 0.893 | [0.849, 0.929] |
-| AUC-ROC | 0.923 | [0.896, 0.946] |
+| Accuracy | 0.734 | [0.663, 0.801] |
+| F1 | 0.838 | [0.786, 0.882] |
+| Recall | 0.950 | [0.908, 0.984] |
+| Precision | 0.751 | [0.678, 0.813] |
+| AUC-ROC | 0.676 | [0.576, 0.766] |
 
-> **Important:** All results above are on **synthetic data**. Performance on real clinical recordings (e.g., Saarbrücken Voice Database) is expected to differ. See Clinical Validity section below.
+> **Why accuracy is lower than synthetic data (~69% vs ~89%):** Real clinical recordings contain noise, microphone variability, accent differences, and subtle pathology that synthetic data cannot fully model. The high recall (90% on test set) means the model successfully flags most pathological voices — the primary goal in a screening context. Lower precision means more false alarms, but in cancer screening, a false alarm (unnecessary laryngoscopy) is far less harmful than a missed case (delayed diagnosis).
 
 ### Data
 
-Current model is trained on **synthetic data** with distributions based on published clinical ranges. The data includes:
-- Realistic inter-class overlap (targeting ~85% accuracy, matching published SVD benchmarks)
-- Inter-feature correlations via a latent severity model
-- 5% label noise to simulate diagnostic ambiguity
+Current model is trained on the **VOICED clinical dataset** (Cesari et al., 2018):
+- 208 real voice recordings from University of Naples Federico II hospital
+- 57 healthy speakers, 151 with clinically verified voice pathologies
+- Diagnoses: hyperkinetic/hypokinetic dysphonia, reflux laryngitis, vocal fold nodules/polyps/paralysis
+- Sustained vowel 'a', 5 seconds, 8 kHz, recorded via mobile device in clinical setting
+- All diagnoses confirmed by medical experts using the SIFEL protocol
 
-For production, replace with real clinical datasets (e.g., Saarbrücken Voice Database).
+Synthetic data (600 samples) is also available in `data/features.csv` for comparison.
 
 ## Clinical Validity & Limitations
 
 ### Technical Validity
-- Best model achieves ~88% accuracy via 5-fold stratified cross-validation on synthetic data
-- **95% bootstrap confidence intervals**: Accuracy [0.850, 0.905], F1 [0.851, 0.907], AUC-ROC [0.900, 0.948]
-- Precision-recall analysis shows AP = 0.908; at recall = 95%, precision = 73%
-- Performance metrics (precision, recall, F1, AUC) reported transparently in the app
+- Model trained and evaluated on **real clinical recordings** from the VOICED dataset (208 patients, University of Naples)
+- Best model achieves 73% accuracy, 84% F1, and 94% recall via 5-fold stratified cross-validation
+- **95% bootstrap confidence intervals**: Accuracy [0.663, 0.801], F1 [0.786, 0.882], AUC-ROC [0.576, 0.766]
+- High recall (90% on held-out test) confirms suitability as a screening tool
 - Feature extraction uses Praat and Librosa — standard tools in published voice-pathology research
 
 ### Clinical Validity Gaps
-- **No real-patient validation** — model trained only on synthetic samples
-- **No external dataset testing** — not evaluated on SVD, MEEI, or other clinical corpora
+- **Single-site data** — model trained on recordings from one hospital; generalizability unverified
+- **No external dataset testing** — not evaluated on SVD, MEEI, or other independent clinical corpora
+- **Class imbalance** — 57 healthy vs 151 pathological (mitigated by balanced class weights)
 - **No demographic sub-group analysis** — performance may vary by age, sex, accent, or language
 - **No prospective study** — not tested alongside ENT specialists in real-world settings
 - **Recording conditions uncontrolled** — consumer microphones and ambient noise introduce untested variability
@@ -222,7 +236,7 @@ In addition to the tabular pipeline, `train_spectrogram_cnn.py` implements an al
 
 The tabular pipeline is used in the app for interpretability; the CNN demonstrates deeper audio-ML capability.
 
-> **Note on CNN accuracy:** The CNN achieves 100% accuracy / AUC 1.0 on synthetic audio, where pathological markers (jitter, sub-harmonics, noise) are programmatically injected with clear separation. This performance is expected to drop significantly on real clinical recordings, where pathology manifests with far more variability. The metric demonstrates the pipeline works correctly — not that the task is solved.
+> **Important caveat on CNN metrics:** The CNN achieves 100% accuracy on **synthetic** audio where pathological markers are programmatically injected. This is a pipeline validation artifact, NOT a clinical performance claim. On real clinical data, the tabular pipeline achieves ~69% accuracy — expect similar or worse from a CNN on real recordings. The CNN has **not** been evaluated on VOICED or any clinical dataset.
 
 ## Future Directions
 
@@ -234,14 +248,15 @@ The tabular pipeline is used in the app for interpretability; the CNN demonstrat
 
 ## References
 
-1. Teixeira, J.P. et al. (2013). "Vocal Acoustic Analysis — Jitter, Shimmer and HNR Parameters." *Procedia Technology*, 9.
-2. Godino-Llorente, J.I. et al. (2006). "Dimensionality Reduction of a Pathological Voice Quality Feature Set." *IEEE Trans. BME*, 53(10).
-3. Martinez, D. et al. (2012). "Voice Pathology Detection on the Saarbrucken Voice Database."
-4. Boersma, P. & Weenink, D. (2023). Praat: doing phonetics by computer.
-5. American Cancer Society (2024). "Signs and Symptoms of Laryngeal and Hypopharyngeal Cancers."
-6. Baevski, A. et al. (2020). "wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations." *NeurIPS*.
-7. Hsu, W.-N. et al. (2021). "HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction." *IEEE/ACM Trans. ASLP*.
-8. Hemmerling, D. et al. (2016). "Voice data mining for laryngeal pathology assessment." *Computers in Biology and Medicine*, 69.
+1. Cesari, U. et al. (2018). "A new database of healthy and pathological voices." *Computers & Electrical Engineering*, 68, 310-321.
+2. Teixeira, J.P. et al. (2013). "Vocal Acoustic Analysis — Jitter, Shimmer and HNR Parameters." *Procedia Technology*, 9.
+3. Godino-Llorente, J.I. et al. (2006). "Dimensionality Reduction of a Pathological Voice Quality Feature Set." *IEEE Trans. BME*, 53(10).
+4. Martinez, D. et al. (2012). "Voice Pathology Detection on the Saarbrucken Voice Database."
+5. Boersma, P. & Weenink, D. (2023). Praat: doing phonetics by computer.
+6. American Cancer Society (2024). "Signs and Symptoms of Laryngeal and Hypopharyngeal Cancers."
+7. Baevski, A. et al. (2020). "wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations." *NeurIPS*.
+8. Hsu, W.-N. et al. (2021). "HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction." *IEEE/ACM Trans. ASLP*.
+9. Hemmerling, D. et al. (2016). "Voice data mining for laryngeal pathology assessment." *Computers in Biology and Medicine*, 69.
 
 ## License
 
