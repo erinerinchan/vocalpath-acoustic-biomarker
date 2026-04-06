@@ -20,6 +20,7 @@ Voice changes — particularly persistent hoarseness — are among the earliest 
 
 - **26 acoustic biomarkers** including jitter, shimmer, HNR, MFCCs, spectral features
 - **Multi-model comparison** (Random Forest, SVM, Logistic Regression) with 5-fold stratified CV
+- **SMOTE oversampling comparison** — evaluates whether synthetic minority oversampling improves classification
 - **Held-out test set evaluation** (80/20 stratified split) for honest performance estimates
 - **SHAP explanations** showing which features drove each individual prediction
 - **Precision-recall analysis** with clinical discussion of why recall matters in cancer screening
@@ -63,7 +64,9 @@ vocal-path-ai/
 ├── feature_extraction.py     # Shared 26-feature extraction module
 ├── load_voiced.py            # VOICED clinical dataset ingestion
 ├── generate_demo_data.py     # Synthetic data generation with realistic overlap
-├── train_model.py            # Multi-model training and evaluation
+├── train_model.py            # Multi-model training, SMOTE comparison, evaluation
+├── evaluate_model.py         # Standalone model evaluation with threshold analysis
+├── visualize_results.py      # Publication-quality plots (radar, importance, comparison)
 ├── generate_sample_audio.py  # Synthetic test .wav generator
 ├── generate_readme_demo.py   # Generates README demo image
 ├── train_spectrogram_cnn.py  # Mel-spectrogram CNN (deep learning, optional)
@@ -84,7 +87,8 @@ vocal-path-ai/
 ├── model/
 │   ├── rf_classifier.joblib  # Trained model
 │   ├── feature_names.joblib  # Feature column names
-│   ├── metrics.json          # Cross-validation results
+│   ├── metrics.json          # Cross-validation results + SMOTE comparison
+│   ├── evaluation_report.json # Standalone evaluation report
 │   ├── confusion_matrix.csv  # CV confusion matrix
 │   ├── roc_data.csv          # ROC curve data
 │   ├── pr_curve.csv          # Precision-recall curve data
@@ -145,6 +149,15 @@ The model is now trained and evaluated on the **VOICED clinical dataset** — 20
 | Logistic Regression | 0.687 | 0.831 | 0.719 | 0.769 | 0.718 |
 
 *Selected model: Random Forest (highest F1). High recall (94%) is desirable for a screening tool.*
+
+#### SMOTE Oversampling Comparison
+
+| Configuration | F1 | Recall | Accuracy |
+|--------------|-----|--------|----------|
+| **Without SMOTE** (balanced class weights) | **0.835** | **0.942** | **0.729** |
+| With SMOTE | 0.819 | 0.826 | — |
+
+*SMOTE does not improve performance — balanced class weights already handle the 57:151 imbalance effectively. The balanced-weights approach achieves higher recall, which is critical for screening.*
 
 #### Held-Out Test Set (20% Stratified Split, N=42)
 
