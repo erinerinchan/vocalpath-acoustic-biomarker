@@ -32,7 +32,11 @@ from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report
+from sklearn.metrics import (confusion_matrix, roc_curve, auc, classification_report,
+                             precision_recall_curve, average_precision_score,
+                             accuracy_score, f1_score, recall_score, precision_score,
+                             roc_auc_score)
+from sklearn.model_selection import learning_curve
 import joblib
 
 
@@ -207,6 +211,65 @@ def main():
     roc_df.to_csv("model/roc_data.csv", index=False)
 
     importance_df.to_csv("model/feature_importance.csv", index=False)
+
+    # ── 11. Precision-Recall curve data ──
+    # Useful for understanding the recall-vs-precision tradeoff in screening
+    prec, rec, pr_thresh = precision_recall_curve(y, y_proba)
+    avg_prec = average_precision_score(y, y_proba)
+    pr_df = pd.DataFrame({
+        "precision": prec[:-1],
+        "recall": rec[:-1],
+        "threshold": pr_thresh,
+    })
+    pr_df.to_csv("model/pr_curve.csv", index=False)
+    print(f"\nAverage Precision: {avg_prec:.3f}")
+
+    # ── 12. Bootstrap confidence intervals ──
+    # Resample predictions 1000 times to get 95% CI on each metric
+    y_pred_cv = (y_proba >= 0.5).astype(int)
+    n_boot = 1000
+    rng = np.random.RandomState(42)
+    boot_results = {m: [] for m in ["accuracy", "f1", "recall", "precision", "roc_auc"]}
+    for _ in range(n_boot):
+        idx = rng.choice(len(y), len(y), replace=True)
+        boot_results["accuracy"].append(accuracy_score(y[idx], y_pred_cv[idx]))
+        boot_results["f1"].append(f1_score(y[idx], y_pred_cv[idx]))
+        boot_results["recall"].append(recall_score(y[idx], y_pred_cv[idx]))
+        boot_results["precision"].append(precision_score(y[idx], y_pred_cv[idx]))
+        boot_results["roc_auc"].append(roc_auc_score(y[idx], y_proba[idx]))
+
+    ci_data = {}
+    print(f"\n95% Bootstrap Confidence Intervals ({n_boot} iterations):")
+    for m, values in boot_results.items():
+        low, high = np.percentile(values, [2.5, 97.5])
+        mean = np.mean(values)
+        ci_data[m] = {"mean": round(mean, 4), "ci_low": round(low, 4), "ci_high": round(high, 4)}
+        print(f"  {m:12s}: {mean:.3f}  [{low:.3f}, {high:.3f}]")
+
+    save_metrics["bootstrap_ci"] = ci_data
+    save_metrics["average_precision"] = round(avg_prec, 4)
+
+    # Re-save metrics.json with new fields
+    with open("model/metrics.json", "w") as f:
+        json.dump(save_metrics, f, indent=2)
+
+    # ── 13. Learning curves ──
+    # Shows how performance changes with data size
+    print("\nComputing learning curves...")
+    train_sizes_abs, train_scores, val_scores = learning_curve(
+        best_pipeline, X, y, cv=cv,
+        train_sizes=np.linspace(0.1, 1.0, 10),
+        scoring="f1", n_jobs=-1, random_state=42,
+    )
+    lc_df = pd.DataFrame({
+        "train_size": train_sizes_abs,
+        "train_mean": train_scores.mean(axis=1),
+        "train_std": train_scores.std(axis=1),
+        "val_mean": val_scores.mean(axis=1),
+        "val_std": val_scores.std(axis=1),
+    })
+    lc_df.to_csv("model/learning_curve.csv", index=False)
+    print(f"Learning curve saved (final val F1: {val_scores.mean(axis=1)[-1]:.3f})")
 
     print(f"\nSaved all artifacts to model/")
 
