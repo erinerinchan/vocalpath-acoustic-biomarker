@@ -12,7 +12,7 @@ Voice changes — particularly persistent hoarseness — are among the earliest 
 
 **This is a research prototype and is not intended for clinical diagnosis.**
 
-> **[▶ Try the live demo on Streamlit Cloud](https://YOUR_USERNAME-vocal-path-ai.streamlit.app)**
+> **[▶ Try the live demo on Streamlit Cloud](https://erinerinchan-vocalpath-acoustic-biomarker.streamlit.app)**
 
 ## Features
 
@@ -26,8 +26,8 @@ Voice changes — particularly persistent hoarseness — are among the earliest 
 
 ```bash
 # Clone and setup
-git clone https://github.com/YOUR_USERNAME/vocal-path-ai.git
-cd vocal-path-ai
+git clone https://github.com/erinerinchan/vocalpath-acoustic-biomarker.git
+cd vocalpath-acoustic-biomarker
 python -m venv venv
 venv\Scripts\activate          # Windows
 # source venv/bin/activate     # macOS/Linux
