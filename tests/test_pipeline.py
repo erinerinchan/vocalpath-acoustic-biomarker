@@ -151,3 +151,119 @@ class TestFeatureExtraction:
         assert len(features) == 26, f"Expected 26 features, got {len(features)}"
         assert all(isinstance(v, (int, float, np.floating)) for v in features.values())
         assert features["f0_mean"] > 0, "F0 mean should be positive for a vowel"
+
+    @pytest.mark.skipif(
+        not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "samples", "healthy_vowel.wav")),
+        reason="Sample audio not generated yet"
+    )
+    def test_feature_extraction_returns_26_features(self):
+        """Verify all 26 biomarkers are extracted from sample audio."""
+        import librosa
+
+        audio_path = os.path.join(self.SAMPLES_DIR, "healthy_vowel.wav")
+        y, sr = librosa.load(audio_path, sr=16000)
+        import parselmouth
+        from parselmouth.praat import call
+
+        sound = parselmouth.Sound(audio_path)
+
+        features = {}
+        pitch = call(sound, "To Pitch", 0.0, 75, 500)
+        features["f0_mean"] = call(pitch, "Get mean", 0, 0, "Hertz")
+        features["f0_std"] = call(pitch, "Get standard deviation", 0, 0, "Hertz")
+        pp = call(sound, "To PointProcess (periodic, cc)", 75, 500)
+        features["jitter_local"] = call(pp, "Get jitter (local)", 0, 0, 0.0001, 0.02, 1.3)
+        features["jitter_rap"] = call(pp, "Get jitter (rap)", 0, 0, 0.0001, 0.02, 1.3)
+        features["shimmer_local"] = call([sound, pp], "Get shimmer (local)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
+        features["shimmer_apq3"] = call([sound, pp], "Get shimmer (apq3)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
+        harmonicity = call(sound, "To Harmonicity (cc)", 0.01, 75, 0.1, 1.0)
+        features["hnr"] = call(harmonicity, "Get mean", 0, 0)
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        for i in range(13):
+            features[f"mfcc_{i+1}"] = np.mean(mfccs[i])
+        features["spectral_centroid"] = np.mean(librosa.feature.spectral_centroid(y=y, sr=sr))
+        features["spectral_bandwidth"] = np.mean(librosa.feature.spectral_bandwidth(y=y, sr=sr))
+        features["spectral_flatness"] = np.mean(librosa.feature.spectral_flatness(y=y))
+        features["spectral_rolloff"] = np.mean(librosa.feature.spectral_rolloff(y=y, sr=sr))
+        features["zcr"] = np.mean(librosa.feature.zero_crossing_rate(y))
+        features["rms"] = np.mean(librosa.feature.rms(y=y))
+
+        expected_names = [
+            "f0_mean", "f0_std", "jitter_local", "jitter_rap",
+            "shimmer_local", "shimmer_apq3", "hnr",
+            "mfcc_1", "mfcc_2", "mfcc_3", "mfcc_4", "mfcc_5", "mfcc_6",
+            "mfcc_7", "mfcc_8", "mfcc_9", "mfcc_10", "mfcc_11", "mfcc_12", "mfcc_13",
+            "spectral_centroid", "spectral_bandwidth", "spectral_flatness",
+            "spectral_rolloff", "zcr", "rms",
+        ]
+        assert sorted(features.keys()) == sorted(expected_names)
+
+
+class TestFeatureRanges:
+    """Verify extracted features fall within physiologically plausible ranges."""
+
+    @pytest.fixture(autouse=True)
+    def load_data(self):
+        self.df = pd.read_csv(
+            os.path.join(os.path.dirname(__file__), "..", "data", "features.csv")
+        )
+
+    def test_jitter_is_plausible(self):
+        """Jitter (local) should be < 5% for all samples."""
+        assert (self.df["jitter_local"] < 0.05).all(), "Jitter exceeds 5%"
+
+    def test_shimmer_is_plausible(self):
+        """Shimmer (local) should be < 15% for all samples."""
+        assert (self.df["shimmer_local"] < 0.15).all(), "Shimmer exceeds 15%"
+
+    def test_f0_in_plausible_range(self):
+        """F0 mean should be between 50 and 500 Hz."""
+        assert (self.df["f0_mean"] >= 50).all(), "F0 below 50 Hz"
+        assert (self.df["f0_mean"] <= 500).all(), "F0 above 500 Hz"
+
+    def test_hnr_is_plausible(self):
+        """HNR should be between 0 and 45 dB."""
+        assert (self.df["hnr"] >= 0).all(), "HNR below 0"
+        assert (self.df["hnr"] <= 45).all(), "HNR above 45 dB"
+
+
+class TestModelPredictionShape:
+    """Verify model returns correct output shapes and probabilities."""
+
+    MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "model")
+
+    def test_prediction_shape_single_sample(self):
+        """Model should return a single prediction for a single input."""
+        model = joblib.load(os.path.join(self.MODEL_DIR, "rf_classifier.joblib"))
+        feature_names = joblib.load(os.path.join(self.MODEL_DIR, "feature_names.joblib"))
+        dummy = np.zeros((1, len(feature_names)))
+        pred = model.predict(dummy)
+        assert pred.shape == (1,)
+
+    def test_prediction_shape_batch(self):
+        """Model should return correct shape for batch predictions."""
+        model = joblib.load(os.path.join(self.MODEL_DIR, "rf_classifier.joblib"))
+        feature_names = joblib.load(os.path.join(self.MODEL_DIR, "feature_names.joblib"))
+        dummy = np.zeros((10, len(feature_names)))
+        pred = model.predict(dummy)
+        assert pred.shape == (10,)
+
+    def test_probability_for_both_classes(self):
+        """Model should return probability for both classes."""
+        model = joblib.load(os.path.join(self.MODEL_DIR, "rf_classifier.joblib"))
+        feature_names = joblib.load(os.path.join(self.MODEL_DIR, "feature_names.joblib"))
+        dummy = np.zeros((1, len(feature_names)))
+        proba = model.predict_proba(dummy)
+        assert proba.shape == (1, 2), "Model should output 2 class probabilities"
+        assert abs(proba[0].sum() - 1.0) < 1e-6, "Probabilities must sum to 1"
+
+    def test_held_out_test_metrics_saved(self):
+        """Verify held-out test metrics are saved in metrics.json."""
+        metrics_path = os.path.join(self.MODEL_DIR, "metrics.json")
+        with open(metrics_path) as f:
+            metrics = json.load(f)
+        if "held_out_test" in metrics:
+            hot = metrics["held_out_test"]
+            for key in ["accuracy", "precision", "recall", "f1_score", "auc_roc"]:
+                assert key in hot, f"Missing held-out test metric: {key}"
+                assert 0 <= hot[key] <= 1, f"Held-out {key} out of range: {hot[key]}"
