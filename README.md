@@ -18,8 +18,12 @@ Voice changes — particularly persistent hoarseness — are among the earliest 
 
 - **26 acoustic biomarkers** including jitter, shimmer, HNR, MFCCs, spectral features
 - **Multi-model comparison** (Random Forest, SVM, Logistic Regression) with 5-fold stratified CV
-- **Interactive visualizations**: waveform, MFCC spectrogram, radar chart, confusion matrix, ROC curve
+- **Precision-recall analysis** with clinical discussion of why recall matters in cancer screening
+- **Bootstrap confidence intervals** (1,000 iterations) for all metrics
+- **Learning curves** to assess whether more data would improve performance
+- **Interactive visualizations**: waveform, MFCC spectrogram, radar chart, confusion matrix, ROC curve, PR curve
 - **Downloadable HTML report** for each analysis
+- **Real audio testing** script to run voice recordings through the pipeline
 - **Methodology documentation** with clinical references
 
 ## Quick Start
@@ -56,6 +60,7 @@ vocal-path-ai/
 ├── generate_sample_audio.py  # Synthetic test .wav generator
 ├── generate_readme_demo.py   # Generates README demo image
 ├── train_spectrogram_cnn.py  # Mel-spectrogram CNN (deep learning, optional)
+├── test_real_audio.py        # Test pipeline on real audio recordings
 ├── tests/
 │   └── test_pipeline.py      # Unit tests for core pipeline
 ├── .streamlit/
@@ -70,6 +75,8 @@ vocal-path-ai/
 │   ├── metrics.json          # Cross-validation results
 │   ├── confusion_matrix.csv  # CV confusion matrix
 │   ├── roc_data.csv          # ROC curve data
+│   ├── pr_curve.csv          # Precision-recall curve data
+│   ├── learning_curve.csv    # Learning curve data (F1 vs sample size)
 │   └── feature_importance.csv
 ├── notebooks/
 │   └── eda.ipynb             # Exploratory data analysis
@@ -100,6 +107,13 @@ Three models compared via 5-fold stratified cross-validation:
 
 Best model selected by F1 score. All models use StandardScaler preprocessing and balanced class weights.
 
+### Evaluation Methodology
+
+- **Precision-recall curves** with clinical discussion: in cancer screening, recall (sensitivity) is prioritised over precision — missing a sick person is worse than a false alarm
+- **Bootstrap confidence intervals** (1,000 resamples) provide honest uncertainty estimates rather than single-point accuracy claims
+- **Learning curves** show model performance vs. training set size, indicating whether more data would help
+- **Cohen's d effect sizes** and Mann-Whitney U tests quantify feature discriminative power with statistical rigour
+
 ### Data
 
 Current model is trained on **synthetic data** with distributions based on published clinical ranges. The data includes:
@@ -113,6 +127,8 @@ For production, replace with real clinical datasets (e.g., Saarbrücken Voice Da
 
 ### Technical Validity
 - Best model achieves ~88% accuracy via 5-fold stratified cross-validation on synthetic data
+- **95% bootstrap confidence intervals**: Accuracy [0.850, 0.905], F1 [0.851, 0.907], AUC-ROC [0.900, 0.948]
+- Precision-recall analysis shows AP = 0.908; at recall = 95%, precision = 73%
 - Performance metrics (precision, recall, F1, AUC) reported transparently in the app
 - Feature extraction uses Praat and Librosa — standard tools in published voice-pathology research
 
