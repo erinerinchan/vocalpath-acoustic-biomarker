@@ -2,62 +2,72 @@
   "best_model": "SVM (RBF)",
   "n_samples": 600,
   "n_features": 26,
+  "n_train": 480,
+  "n_test": 120,
   "cv_folds": 5,
   "note": "Trained on synthetic data with realistic class overlap and 5% label noise. See generate_demo_data.py.",
   "models": {
     "Random Forest": {
-      "accuracy": "0.873 +/- 0.024",
-      "precision": "0.870 +/- 0.033",
-      "recall": "0.886 +/- 0.031",
-      "f1_score": "0.877 +/- 0.023",
-      "auc_roc": "0.923 +/- 0.021"
+      "accuracy": "0.852 +/- 0.027",
+      "precision": "0.847 +/- 0.050",
+      "recall": "0.873 +/- 0.042",
+      "f1_score": "0.858 +/- 0.023",
+      "auc_roc": "0.933 +/- 0.026"
     },
     "SVM (RBF)": {
-      "accuracy": "0.882 +/- 0.017",
-      "precision": "0.910 +/- 0.016",
-      "recall": "0.853 +/- 0.027",
-      "f1_score": "0.880 +/- 0.018",
-      "auc_roc": "0.926 +/- 0.024"
+      "accuracy": "0.885 +/- 0.035",
+      "precision": "0.900 +/- 0.038",
+      "recall": "0.873 +/- 0.049",
+      "f1_score": "0.886 +/- 0.036",
+      "auc_roc": "0.927 +/- 0.034"
     },
     "Logistic Regression": {
-      "accuracy": "0.863 +/- 0.027",
-      "precision": "0.885 +/- 0.039",
-      "recall": "0.843 +/- 0.030",
-      "f1_score": "0.863 +/- 0.025",
-      "auc_roc": "0.917 +/- 0.027"
+      "accuracy": "0.848 +/- 0.045",
+      "precision": "0.867 +/- 0.036",
+      "recall": "0.833 +/- 0.098",
+      "f1_score": "0.846 +/- 0.053",
+      "auc_roc": "0.917 +/- 0.035"
     }
   },
-  "accuracy": "0.882 +/- 0.017",
-  "precision": "0.910 +/- 0.016",
-  "recall": "0.853 +/- 0.027",
-  "f1_score": "0.880 +/- 0.018",
-  "auc_roc": "0.926 +/- 0.024",
+  "accuracy": "0.885 +/- 0.035",
+  "precision": "0.900 +/- 0.038",
+  "recall": "0.873 +/- 0.049",
+  "f1_score": "0.886 +/- 0.036",
+  "auc_roc": "0.927 +/- 0.034",
+  "held_out_test": {
+    "n_test": 120,
+    "accuracy": 0.8917,
+    "precision": 0.9138,
+    "recall": 0.8689,
+    "f1_score": 0.8908,
+    "auc_roc": 0.915
+  },
   "bootstrap_ci": {
     "accuracy": {
-      "mean": 0.8788,
-      "ci_low": 0.85,
-      "ci_high": 0.905
+      "mean": 0.8876,
+      "ci_low": 0.8562,
+      "ci_high": 0.9146
     },
     "f1": {
-      "mean": 0.8798,
-      "ci_low": 0.8514,
-      "ci_high": 0.9071
+      "mean": 0.8892,
+      "ci_low": 0.8577,
+      "ci_high": 0.9168
     },
     "recall": {
-      "mean": 0.8735,
-      "ci_low": 0.8358,
-      "ci_high": 0.9097
+      "mean": 0.8854,
+      "ci_low": 0.8462,
+      "ci_high": 0.9237
     },
     "precision": {
-      "mean": 0.8866,
-      "ci_low": 0.8488,
-      "ci_high": 0.9246
+      "mean": 0.8934,
+      "ci_low": 0.8487,
+      "ci_high": 0.9293
     },
     "roc_auc": {
-      "mean": 0.9252,
-      "ci_low": 0.9,
-      "ci_high": 0.9483
+      "mean": 0.9231,
+      "ci_low": 0.8963,
+      "ci_high": 0.9465
     }
   },
-  "average_precision": 0.9082
+  "average_precision": 0.9144
 }

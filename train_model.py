@@ -26,7 +26,8 @@ import pandas as pd
 import numpy as np
 import json
 import os
-from sklearn.model_selection import StratifiedKFold, cross_validate, cross_val_predict
+from sklearn.model_selection import (StratifiedKFold, cross_validate, cross_val_predict,
+                                     train_test_split)
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
@@ -77,6 +78,14 @@ def main():
     print(f"Dataset: {X.shape[0]} samples, {X.shape[1]} features")
     print(f"Class distribution: Healthy={sum(y == 0)}, Pathological={sum(y == 1)}\n")
 
+    # ── 1b. Hold out 20% as a final test set BEFORE any CV ──
+    # This test set is never used during model selection or tuning.
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, stratify=y, random_state=42,
+    )
+    print(f"Train set: {X_train.shape[0]} samples")
+    print(f"Held-out test set: {X_test.shape[0]} samples\n")
+
     # ── 2. Set up cross-validation ──
     # Stratified = each fold keeps the same healthy/pathological ratio
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
@@ -120,7 +129,7 @@ def main():
     print("=" * 60)
     for name, pipeline in models.items():
         print(f"\n--- {name} ---")
-        metrics = evaluate_model(pipeline, X, y, cv)
+        metrics = evaluate_model(pipeline, X_train, y_train, cv)
         all_metrics[name] = metrics
         for k, v in metrics.items():
             if not k.endswith("_std"):
@@ -137,20 +146,39 @@ def main():
     # ── 6. Build a confusion matrix for the best model ──
     # cross_val_predict gives us "out-of-fold" predictions: each sample is
     # predicted by a model that was NOT trained on it, so no cheating.
-    y_pred = cross_val_predict(best_pipeline, X, y, cv=cv)
-    cm = confusion_matrix(y, y_pred)
-    report = classification_report(y, y_pred, target_names=["Healthy", "Pathological"])
-    print(f"\nClassification Report ({best_name}):\n{report}")
+    y_pred = cross_val_predict(best_pipeline, X_train, y_train, cv=cv)
+    cm = confusion_matrix(y_train, y_pred)
+    report = classification_report(y_train, y_pred, target_names=["Healthy", "Pathological"])
+    print(f"\nClassification Report ({best_name}) [CV on train set]:\n{report}")
 
-    # ── 7. Train the winner on ALL data so it's as strong as possible ──
+    # ── 7. Train the winner on ALL training data so it's as strong as possible ──
+    best_pipeline.fit(X_train, y_train)
+
+    # ── 7b. Evaluate on held-out test set ──
+    y_test_pred = best_pipeline.predict(X_test)
+    y_test_proba = best_pipeline.predict_proba(X_test)[:, 1]
+    test_metrics = {
+        "accuracy": accuracy_score(y_test, y_test_pred),
+        "precision": precision_score(y_test, y_test_pred),
+        "recall": recall_score(y_test, y_test_pred),
+        "f1": f1_score(y_test, y_test_pred),
+        "roc_auc": roc_auc_score(y_test, y_test_proba),
+    }
+    print(f"\nHeld-out Test Set Results ({best_name}):")
+    for k, v in test_metrics.items():
+        print(f"  {k}: {v:.3f}")
+
+    test_cm = confusion_matrix(y_test, y_test_pred)
+    test_report = classification_report(y_test, y_test_pred, target_names=["Healthy", "Pathological"])
+    print(f"\nTest Set Classification Report:\n{test_report}")
+
+    # ── 7c. Refit on ALL data for deployment ──
     # (Cross-validation was just for evaluation — now we use everything.)
     best_pipeline.fit(X, y)
 
-    # ── 8. ROC curve data (cross-validated probabilities) ──
-    # Instead of hard yes/no labels, this gets probability scores so we can
-    # plot how "confident" the model is at different decision thresholds.
-    y_proba = cross_val_predict(best_pipeline, X, y, cv=cv, method="predict_proba")[:, 1]
-    fpr, tpr, _ = roc_curve(y, y_proba)
+    # ── 8. ROC curve data (cross-validated probabilities on training set) ──
+    y_proba = cross_val_predict(best_pipeline, X_train, y_train, cv=cv, method="predict_proba")[:, 1]
+    fpr, tpr, _ = roc_curve(y_train, y_proba)
     roc_auc = auc(fpr, tpr)
 
     # ── 9. Feature importance ──
@@ -179,6 +207,8 @@ def main():
         "best_model": best_name,
         "n_samples": int(X.shape[0]),
         "n_features": int(X.shape[1]),
+        "n_train": int(X_train.shape[0]),
+        "n_test": int(X_test.shape[0]),
         "cv_folds": 5,
         "note": "Trained on synthetic data with realistic class overlap and 5% label noise. See generate_demo_data.py.",
         "models": {},
@@ -199,6 +229,16 @@ def main():
     save_metrics["f1_score"] = f"{best_m['f1']:.3f} +/- {best_m['f1_std']:.3f}"
     save_metrics["auc_roc"] = f"{best_m['auc_roc']:.3f} +/- {best_m['auc_roc_std']:.3f}"
 
+    # Held-out test set metrics
+    save_metrics["held_out_test"] = {
+        "n_test": int(X_test.shape[0]),
+        "accuracy": round(test_metrics["accuracy"], 4),
+        "precision": round(test_metrics["precision"], 4),
+        "recall": round(test_metrics["recall"], 4),
+        "f1_score": round(test_metrics["f1"], 4),
+        "auc_roc": round(test_metrics["roc_auc"], 4),
+    }
+
     with open("model/metrics.json", "w") as f:
         json.dump(save_metrics, f, indent=2)
 
@@ -213,9 +253,8 @@ def main():
     importance_df.to_csv("model/feature_importance.csv", index=False)
 
     # ── 11. Precision-Recall curve data ──
-    # Useful for understanding the recall-vs-precision tradeoff in screening
-    prec, rec, pr_thresh = precision_recall_curve(y, y_proba)
-    avg_prec = average_precision_score(y, y_proba)
+    prec, rec, pr_thresh = precision_recall_curve(y_train, y_proba)
+    avg_prec = average_precision_score(y_train, y_proba)
     pr_df = pd.DataFrame({
         "precision": prec[:-1],
         "recall": rec[:-1],
@@ -231,12 +270,12 @@ def main():
     rng = np.random.RandomState(42)
     boot_results = {m: [] for m in ["accuracy", "f1", "recall", "precision", "roc_auc"]}
     for _ in range(n_boot):
-        idx = rng.choice(len(y), len(y), replace=True)
-        boot_results["accuracy"].append(accuracy_score(y[idx], y_pred_cv[idx]))
-        boot_results["f1"].append(f1_score(y[idx], y_pred_cv[idx]))
-        boot_results["recall"].append(recall_score(y[idx], y_pred_cv[idx]))
-        boot_results["precision"].append(precision_score(y[idx], y_pred_cv[idx]))
-        boot_results["roc_auc"].append(roc_auc_score(y[idx], y_proba[idx]))
+        idx = rng.choice(len(y_train), len(y_train), replace=True)
+        boot_results["accuracy"].append(accuracy_score(y_train[idx], y_pred_cv[idx]))
+        boot_results["f1"].append(f1_score(y_train[idx], y_pred_cv[idx]))
+        boot_results["recall"].append(recall_score(y_train[idx], y_pred_cv[idx]))
+        boot_results["precision"].append(precision_score(y_train[idx], y_pred_cv[idx]))
+        boot_results["roc_auc"].append(roc_auc_score(y_train[idx], y_proba[idx]))
 
     ci_data = {}
     print(f"\n95% Bootstrap Confidence Intervals ({n_boot} iterations):")
@@ -257,7 +296,7 @@ def main():
     # Shows how performance changes with data size
     print("\nComputing learning curves...")
     train_sizes_abs, train_scores, val_scores = learning_curve(
-        best_pipeline, X, y, cv=cv,
+        best_pipeline, X_train, y_train, cv=cv,
         train_sizes=np.linspace(0.1, 1.0, 10),
         scoring="f1", n_jobs=-1, random_state=42,
     )
