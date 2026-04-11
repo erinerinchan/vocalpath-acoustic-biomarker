@@ -1,0 +1,13 @@
+name: Keep Render alive
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *' # every 6 hours
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render app
+        run: curl -sf --max-time 30 https://vocalpath-acoustic-biomarker.onrender.com > /dev/null
